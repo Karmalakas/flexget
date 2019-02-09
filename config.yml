@@ -6,16 +6,13 @@ variables: secrets.yml
 templates:
 
   global:
-# semua task akan berhenti jika sisa space untuk path - path dibawah ini kurang
-# dari 5000mb
+    # all tasks will stop if the remaining space for the paths below is lacking
+    # of 5000mb
     free_space:
       path: '{? media.partition ?}'
       space: 5000
     pathscrub: windows
     no_entries_ok: yes
-
-#    proxy:
-#      http: '{? proxy.http ?}'
 
   reject:
     regexp:
@@ -28,7 +25,6 @@ templates:
         - \b(spa)(nish)?\b
         - \b(ger)(man)?\b
         - \bcastellano\b
-        - \brus(sian)?\b
         - \bportugese?\b
         - \btruefrench?\b
         - \blatin(o)?\b
@@ -36,751 +32,356 @@ templates:
         - afg
         - hc
         - korsub
+        - -evo\b
     content_filter:
       reject:
-        - '*.rar'
         - '*.zip'
 
   torrents:
     torrent_alive:
-      min_seeds: 10
-      reject_for: 30 minutes
-    magnets: no
+      min_seeds: 3
+      reject_for: 15 minutes
 
-  rss-tv:
-    inputs:
-      - rss:
-          url: https://eztv.io/ezrss.xml
-          silent: yes
-      - rss:
-          url: http://www.torrentfunk.com/tv/rss.xml
-          silent: yes
-      - rss:
-          url: http://extratorrent.cc/rss.xml?type=popular&cid=8
-          silent: yes
-      - rss:
-          url: '{? showrss.url ?}'
-          silent: yes
-      - rss:
-          url: '{? zoogle.url ?}'
-          silent: yes
+  rss-searches-global:
+    _rss-searches-series-lt: &rss-searches-series-lt
+      - search_rss: '{? jackett.trl.url|replace("__CAT__", jackett.trl.cat_tv_lt) ?}{{ search_term }}'
+      - search_rss: '{? jackett.lm.url|replace("__CAT__", jackett.lm.cat_tv_lt) ?}{{ search_term }}'
+    _rss-searches-movies-lt: &rss-searches-movies-lt
+      - search_rss: '{? jackett.trl.url|replace("__CAT__", jackett.trl.cat_movies_lt) ?}{{ search_term }}'
+      - search_rss: '{? jackett.lm.url|replace("__CAT__", jackett.lm.cat_movies_lt) ?}{{ search_term }}'
+    _rss-searches-series: &rss-searches-series
+      - search_rss: '{? jackett.trl.url|replace("__CAT__", jackett.trl.cat_tv_hd) ?}{{ search_term }}'
+      - search_rss: '{? jackett.lm.url|replace("__CAT__", jackett.lm.cat_tv_hd) ?}{{ search_term }}'
+      - search_rss: '{? jackett.tpb.url|replace("__CAT__", jackett.tpb.cat_tv_hd) ?}{{ search_term }}'
+      - search_rss:
+          url: '{? jackett.rarbg.url|replace("__CAT__", jackett.rarbg.cat_tv_hd) ?}{{ search_term }}'
+          link: guid
+      - search_rss: '{? jackett.torrentcouch.url|replace("__CAT__", jackett.torrentcouch.cat_tv) ?}{{ search_term }}'
+      - search_rss: '{? jackett.zooqle.url|replace("__CAT__", jackett.zooqle.cat_tv_hd) ?}{{ search_term }}'
+    _rss-searches-movies: &rss-searches-movies
+      - search_rss: '{? jackett.trl.url|replace("__CAT__", jackett.trl.cat_movies_hd) ?}{{ search_term }}'
+      - search_rss: '{? jackett.lm.url|replace("__CAT__", jackett.lm.cat_movies_hd) ?}{{ search_term }}'
+      - search_rss: '{? jackett.tpb.url|replace("__CAT__", jackett.tpb.cat_movies_hd) ?}{{ search_term }}'
+      - search_rss:
+          url: '{? jackett.rarbg.url|replace("__CAT__", jackett.rarbg.cat_movies_hd) ?}{{ search_term }}'
+          link: guid
+      - search_rss: '{? jackett.zooqle.url|replace("__CAT__", jackett.zooqle.cat_movies_hd) ?}{{ search_term }}'
 
-  rss-movies:
-    inputs:
-      - rss:
-          url: https://kat.am/movies/?rss=1
-      - rss:
-          url: http://extratorrent.cc/rss.xml?type=popular&cid=4
-      - rss:
-          url: https://www.limetorrents.cc/rss/16/
-      - rss:
-          url: https://yts.am/rss
+  series-settings-global:
+    _series-settings: &series-settings
+      quality: 720p|1080p hdtv+ h264+ dd5.1+
+      identified_by: ep
+      propers: yes
+      tracking: no
 
-  series:
-    metainfo_series: yes
-    thetvdb_lookup: yes
-    trakt_lookup: yes
-    configure_series:
-      settings:
-        qualities:
-          - hdtv <720p
-        identified_by: ep
-        propers: no
-        tracking: backfill
-      from:
-        thetvdb_list:
-          username: '{? thetvdb.username ?}'
-          account_id: '{? thetvdb.account_id ?}'
-          api_key: '{? thetvdb.api_key ?}'
-        filesystem:
-          -  '{? staging.series ?}'
-          -  '{? folder.series ?}'
-    exists_series:
-      path:
-        -  '{? staging.series ?}/'
-        -  '{? folder.series ?}/{{series_name}}'
+  series-from:
+    _series-from: &series-from
+      trakt_list:
+        account: '{? trakt.account ?}'
+        list: watchlistshows
+        type: shows
+
+  series-settings-episodes:
+    _series-settings-episodes: &series-settings-episodes
+      configure_series:
+        settings:
+          <<: *series-settings
+          season_packs: no
+        from: *series-from
+
+  series-settings-packs:
+    _series-settings-packs: &series-settings-packs
+      configure_series:
+        settings:
+          <<: *series-settings
+          season_packs: only
+        from: *series-from
+
+  series-global:
+    _series-setup: &series-setup
+      metainfo_series: yes
+      imdb_lookup: yes
+      thetvdb_lookup: yes
+      trakt_lookup: yes
+      exists_series:
+        path: '{? files_watch.series ?}'
+      assume_quality:
+        720p+ hdtv+ h264+: ac3
+      upgrade:
+        tracking: yes
+        timeframe: 5 days
+        propers: yes
+        on_lower: reject
+      list_match:
+        from:
+          - *series-from
+        remove_on_match: no
+      sort_by:
+        - field: quality.resolution
+          reverse: yes
+
+  series-seasons:
+    <<: [*series-setup, *series-settings-packs]
+    priority: 1
+    discover:
+      what:
+        - next_series_seasons:
+            threshold: 3
+      from: *rss-searches-series
+      interval: 15 minutes
+    content_size:
+      max: 55000
+      min: 15000
+      strict: no
+
+  series-episodes:
+    <<: [*series-setup, *series-settings-episodes]
+    priority: 2
+    discover:
+      what:
+        - next_series_episodes: yes
+      from: *rss-searches-series
+      interval: 15 minutes
+    content_size:
+      max: 3500
+      min: 850
+      strict: no
 
   movies:
     imdb_lookup: yes
-    trakt_lookup: yes
     exists_movie:
-      path:
-        - '{? folder.movies ?}'
-        - '{? staging.movies ?}' 
+      path: '{? files_watch.movies ?}'
+    quality: 1080p+ hdtv+ h264+ dd5.1+
+    assume_quality:
+      1080p bluray h264: dts
+    upgrade:
+      tracking: yes
+      timeframe: 6 weeks
+      propers: yes
+      on_lower: reject
+    sort_by:
+      - field: quality.resolution
+        reverse: yes
 
-  transmission-global:
-    _transmission-settings: &transmission-settings
-      enabled: yes
-      host: localhost
-      port: 9091
-      username: transmission
-      password: transmission
-      ratio: 1
-      include_subs: yes
+  qbittorrent-global:
+    _qbittorrent-settings: &qbittorrent-settings
+      host: '{? qbt.host ?}'
+      port: '{? qbt.port ?}'
+      label: '{? qbt.label ?}'
     retry_failed:
-      retry_time: 10 seconds
+      retry_time: 5 seconds
       retry_time_multiplier: 1
-      max_retries: 4
+      max_retries: 2
 
-  transmission-series:
-    transmission:
-      <<: *transmission-settings
-      main_file_only: yes
-      include_subs: yes
-      rename_like_files: yes
-      path: '{? staging.series ?}/{{tvdb_series_name|default(series_name)|pathscrub}}/'
-      content_filename: "{{tvdb_series_name|default(series_name)|pathscrub}}-{{tvdb_ep_id|default(series_id)}}{% if tvdb_ep_name|default(False) %}-{{tvdb_ep_name|pathscrub}}{% endif %}{% if quality|default(False) %}-[{{quality}}]{% endif %}"
+  qbittorrent-series:
+    qbittorrent:
+      <<: *qbittorrent-settings
+      path: '{? staging.series ?}{{series_name|replace("(", "")|replace(")", "")|replace(" ",".")|pathscrub}}/'
 
-  transmission-premieres:
-    transmission:
-      <<: *transmission-settings
-      main_file_only: yes
-      include_subs: yes
-      rename_like_files: yes
-      path: '{? staging.premieres ?}/{{tvdb_series_name|default(series_name)|pathscrub}}/'
-      content_filename: "{{tvdb_series_name|default(series_name)|pathscrub}}-{{tvdb_ep_id|default(series_id)}}{% if tvdb_ep_name|default(False) %}-{{tvdb_ep_name|pathscrub}}{% endif %}{% if quality|default(False) %}-[{{quality}}]{% endif %}"
+  qbittorrent-movies:
+    qbittorrent:
+      <<: *qbittorrent-settings
+      path: '{? staging.movies ?}{{movie_name|replace("(", "")|replace(")", "")|replace(" ",".")|pathscrub}}'
 
-  transmission-movies:
-    transmission:
-      <<: *transmission-settings
-      main_file_only: yes
-      include_subs: yes
-      rename_like_files: yes
-      path: '{? staging.movies ?}/{{movie_name|pathscrub}}'
-      content_filename: "{{tmdb_name|pathscrub}}-({{tmdb_year}}){% if quality|default(False) %}-[{{quality}}]{% endif %}"
+  qbittorrent-series-lt:
+    qbittorrent:
+      <<: *qbittorrent-settings
+      label: '{? qbt.label_lt ?}'
+      path: '{? staging.lt ?}series/{{movie_name|replace("(", "")|replace(")", "")|replace(" ",".")|pathscrub}}'
+
+  qbittorrent-movies-lt:
+    qbittorrent:
+      <<: *qbittorrent-settings
+      label: '{? qbt.label_lt ?}'
+      path: '{? staging.lt ?}movies/{{movie_name|replace("(", "")|replace(")", "")|replace(" ",".")|pathscrub}}'
+
+  notifiers-global:
+    _notifiers: &notifiers
+      - join:
+          api_key: '{? join_api.key ?}'
+          device_name: 'Pixel 2'
+          url: '{? qbt.remote ?}'
+          icon: '{% if imdb_photo %}{{ imdb_photo }}{% elif tvdb_posters %}{{ tvdb_posters.0 }}{% else %}"https://avatars2.githubusercontent.com/u/682553"{% endif %}'
+          priority: 0
 
   series-notify:
     notify:
       entries:
-        message: |+
-          *Task started:
-          *{{task}}
-          {% if series_name is defined -%}
-          *{{series_name}}* - {{series_id}} - {{quality|d('')}}
-          {% else -%}
-          {{title}}
-          {%- endif -%}
-          *{{trakt_ep_name|d(tvdb_ep_name)|d('')}}*
-          {% if tvdb_ep_image is defined -%}
-          [Image]({{tvdb_ep_image|replace("_", "%5F")}})
-          {%- endif -%}
-          {% if tvdb_url is defined -%}
-          [Show page]({{tvdb_url|replace("_", "%5F")}})
-          {%- endif -%}
-          {% if tvdb_ep_air_date is defined -%}
-          *Aired:* {{tvdb_ep_air_date}}
-          {%- endif -%}
-          {% if tvdb_ep_rating is defined -%}
-          *Ep rate:* {{tvdb_ep_rating}}
-          {%- endif -%}
-          {% if tvdb_actors is defined -%}
-          *Cast:* {{tvdb_actors}}
-          {%- endif -%}
-          {% if tvdb_ep_overview is defined -%}
-          *plot:*
-          --------------------
-          {{tvdb_ep_overview}}
-          {%- endif -%}
-        via:
-          - telegram:
-              bot_token: '{? telegram.bot_token ?}'
-              parse_mode: markdown
-              recipients:
-                - username: '{? telegram.username ?}'
+        title: Series added for download
+        message: '{% if series_name is defined %}{{ trakt_series_name|d(series_name) }} {{series_id|d()}} {{trakt_ep_name|d()}}{% elif tvdb_series_name is defined %}{{tvdb_series_name}} {{tvdb_ep_id|d()}} ({{tvdb_network}}){% elif title is defined %}{{ title }}{% endif %}'
+        via: *notifiers
 
   movies-notify:
     notify:
       entries:
-        message: |+
-          *Task started:
-          *{{task}}
-          {% if imdb_name is defined -%}
-          *{{imdb_name}}* - ({{imdb_year}})
-          {{quality|d('')}}
-          {{imdb_score}}/10 - {{imdb_votes}} votes
-          {{imdb_genres|join(', ')|title}}
-          *Plot:* {{imdb_plot_outline}}
-          {% if tmdb_posters is defined -%}
-          [Image]({{tmdb_posters[0]|replace("_", "%5F")}})
-          {%- endif -%}
-          [Movie Page]({{imdb_url|d('')}})
-          {% else -%}
-          {{title}}
-          {%- endif -%}
+        title: Movie added for download
+        message: '{% if imdb_name is defined %}{{imdb_name}} {{imdb_year}}{% elif title is defined %}{{ title }}{% endif %}'
+        via: *notifiers
+
+  movies-notify-lt:
+    notify:
+      entries:
+        title: '[LT] Movie added for download'
+        message: '{% if imdb_name is defined %}{{imdb_name}} {{imdb_year}}{% elif title is defined %}{{ title }}{% endif %}'
+        via: *notifiers
+
+  movies-notify-mom:
+    notify:
+      entries:
+        title: Filmas pridėtas parsiuntimui
+        message: |
+          <strong>{% if imdb_name is defined %}{{imdb_name}} {{imdb_year}}{% elif title is defined %}{{ title }}{% endif %}</strong><br/><br/>
+          {% if imdb_photo %}<img src="{{ imdb_photo }}"/>{% elif tvdb_posters %}<img src="{{ tvdb_posters.0 }}"/>{% endif %}
         via:
-          - telegram:
-              bot_token: '{? telegram.bot_token ?}'
-              parse_mode: markdown
-              recipients:
-                - username: '{? telegram.username ?}'
+          - email:
+              smtp_host: '{? smtp_settings.host ?}'
+              smtp_port: '{? smtp_settings.port ?}'
+              smtp_username: '{? smtp_settings.user ?}'
+              smtp_password: '{? smtp_settings.pass ?}'
+              from: '{? email.from ?}'
+#              to: '{? email.mom ?}'
+              to: 'mantas@kacinskas.lt'
+              html: yes
+              autofrom: yes
 
 tasks:
   versioncheck:
     version_checker:
       check_for_dev_version: yes
-      interval: 1
+      interval: 1 days
 
-  check-existing-movies:
-    disable:
-      - seen
-      - seen_info_hash
-      - exists_movies
+  discover-series-episodes:
     template:
-      - movies
-    filesystem:
-      path:
-        - '{? folder.movies ?}'
-        - '{? staging.movies ?}'
-      retrieve:
-        - files
-        - dirs
-      recursive: yes
-      regexp: '.*\.(avi|mkv|mp4|m4v|iso)$'
-    accept_all: yes
-    list_add:
-      - movie_list: existing movies
-
-  check-existing-episodes:
-    template:
-      - series
-    filesystem:
-      path:
-        - '{? folder.series ?}'
-        - '{? staging.series ?}'
-      retrieve:
-        - files
-        - dirs
-      recursive: yes
-      regexp: '.*\.(avi|mkv|mp4|m4v|iso)$'
-    all_series: yes
-    only_new: yes
-    list_add:
-      - entry_list: existing episodes
-
-  update-series-list:
-    disable:
-      - seen
-    template:
-      - series
-    filesystem:
-      path:
-        - '{? folder.series ?}'
-        - '{? staging.series ?}'
-      retrieve: dirs
-      recursive: no
-    manipulate:
-      - title:
-          replace:
-            regexp: '$'
-            format: ' S01E01'
-    accept_all: yes
-    list_add:
-      - entry_list: existing series
-
-  discover-series:
-    template:
-      - series
+      - series-episodes
       - torrents
-      - transmission-series
+      - qbittorrent-series
       - reject
       - series-notify
-    discover:
-      what:
-        - next_series_episodes: yes
-      from:
-        - rarbg:
-            category: x264
-    content_size:
-      max: 900
-      min: 20
+
+  discover-series-packs:
+    template:
+      - series-seasons
+      - torrents
+      - qbittorrent-series
+      - reject
+      - series-notify
 
   discover-movies:
     template:
       - movies
       - torrents
-      - transmission-movies
+      - qbittorrent-movies
       - reject
       - movies-notify
     discover:
       what:
         - trakt_list:
-            username: '{? trakt.user ?}'
             account: '{? trakt.account ?}'
             list: watchlist
             type: movies
-      from:
-        - rarbg:
-            category: [2, 5, 8, 9, 20, 15, 16]
-        - piratebay: yes
+      from: *rss-searches-movies
+      release_estimations:
+        optimistic: 6 weeks
+      interval: 90 minutes
+    content_size:
+      max: 20000
+      min: 3500
+      strict: no
+
+  discover-movies-mom:
+    template:
+      - torrents
+      - qbittorrent-movies-lt
+      - reject
+#      - movies-notify-mom
+      - movies-notify-lt
+    seen: local
+    imdb_lookup: yes
+    exists_movie:
+      path: '{? files_watch.lt ?}'
+      type: files
+    quality: 720p+ webrip+ h264+ aac+
+    assume_quality:
+      720p+ bluray h264: ac3
+    upgrade:
+      tracking: yes
+      timeframe: 6 weeks
+      propers: yes
+      on_lower: reject
+    discover:
+      what:
+        - trakt_list:
+            account: '{? trakt.acc_mom ?}'
+            list: watchlist
+            type: movies
+      from: *rss-searches-movies-lt
+      release_estimations:
+        optimistic: 6 weeks
+      interval: 90 minutes
     list_match:
       from:
         - trakt_list:
-            username: '{? trakt.user ?}'
-            account: '{? trakt.account ?}'
-            list: Watchlist
+            account: '{? trakt.acc_mom ?}'
+            list: watchlist
             type: movies
+      remove_on_match: no
     content_size:
-      max: 4000
-      min: 20
+      max: 20000
+      min: 2000
+      strict: no
+    sort_by:
+      - field: quality.resolution
+        reverse: yes
 
-  download-series-manual:
+  check-collected-movies:
     disable:
-      - seen
       - seen_info_hash
-    metainfo_series: yes
-    thetvdb_lookup: yes
-    trakt_lookup: yes
-    parsing:
-      series: internal
-    filesystem:
-      path: '{? staging.series ?}'
-      mask: '*.torrent'
-    accept_all: yes
+      - exists_movies
+    seen: local
     template:
-      - transmission-series
-      - series-notify
-    exec:
-      on_output:
-        for_accepted: rm -rf "{{location}}"
-
-  download-movies-manual:
-    disable:
-      - seen
-      - seen_info_hash
-    imdb_lookup: yes
-    trakt_lookup: yes
-    filesystem:
-      path: '{? staging.movies ?}'
-      mask: '*.torrent'
-    accept_all: yes
-    template:
-      - transmission-movies
-      - movies-notify
-    exec:
-      on_output:
-        for_accepted: rm -rf "{{location}}"
-
-  random-movies-listing:
-    template:
-      - rss-movies
-      - torrents
       - movies
-      - reject
-    priority: 20
-    disable:
-      - seen
-      - seen_info_hash
-      - retry_failed
-    imdb:
-      min_score: 7.0
-      min_votes: 800
-      min_year: 2005
-      reject_genres:
-        - News
-        - Documentary
-        - Horror
-        - Biography
-        - Reality-Tv
-        - Horror
-        - Musical
-        - Music
-      accept_languages:
-        - english
-    regexp:
-      from: title
-      reject:
-        - ts
-        - hindi
-        - german
-        - french
-        - s\d+e\d+: {from: title}
-        - '\d{4}.\d{2}.\d{2}': {from: title}
-        - \d+x\d+: {from: title}
-    require_field: imdb_url
-    imdb_lookup: yes
-    seen_movies: strict
-    list_add:
-      - movie_list: random-movies
-
-  random-movies-download:
-    priority: 21
-    template:
-      - torrents
-      - movies
-      - transmission-movies
-      - reject
-      - movies-notify
-    disable:
-      - seen
-      - seen_info_hash
-      - retry_failed
-    limit_new: 2
-    proper_movies: yes
-    discover:
-      what:
-        - movie_list: random-movies
-      from:
-        - rarbg:
-            category: [2, 5, 8, 9, 20, 15, 16]
-        - piratebay: yes
-    require_field: imdb_url
-    imdb_lookup: yes
-    seen_movies: strict
-    list_match:
-      from:
-        - movie_list: random-movies
-    content_size:
-      max: 4000
-      min: 20
-
-  download-series-rss:
-    template:
-      - series
-      - rss-tv
-      - torrents
-      - transmission-series
-      - reject
-      - series-notify
-    content_size:
-      max: 900
-      min: 20
-
-  get-subs:
-    no_entries_ok: yes
-    subtitle_list:
-      list: need_subs
-      recursion_depth: 3
-    list_match:
-      from:
-        - subtitle_list:
-            list: need_subs
-    subliminal:
-      languages:
-        - en
-      alternatives:
-        - id
-      providers: 
-        - opensubtitles
-        - podnapisi
-      single: no
-      hearing_impaired: yes
-      exact_match: no
-      authentication:
-        opensubtitles:
-          username: '{? opensubtitles.username ?}'
-          password: '{? opensubtitles.password ?}'
-
-  copy-series:
-    disable:
-      - seen
-      - seen_info_hash
-      - retry_failed
-    template: series-notify
-    metainfo_series: yes
-    trakt_lookup: yes
-    thetvdb_lookup: yes
     filesystem:
-      path: '{? staging.series ?}'
+      path: '{? folder.movies ?}'
+      retrieve:
+        - files
+        - dirs
       recursive: yes
-      retrieve: files
-      regexp: '.*\.(avi|mkv|mp4)$'
-    accept_all: yes
-    seen: local
-    require_field:
-      - trakt_series_name
-      - trakt_season
-      - trakt_ep_name
-    copy:
-      to: "{? folder.series ?}/{{tvdb_series_name}}/Season {{trakt_season}}"
-      along:
-        extensions:
-          - srt
-          - sub
-        subdirs:
-          - subs
-    exists: "{? folder.series ?}"
-    content_size:
-      min: 50
-    list_add:
-      - subtitle_list:
-          list: need_subs
-          languages:
-            - en
-            - id
-
-  copy-premieres:
-    disable:
-      - seen
-      - seen_info_hash
-    template: series-notify
-    metainfo_series: yes
-    trakt_lookup: yes
-    filesystem:
-      path: '{? staging.premieres ?}'
-      recursive: yes
-      retrieve: files
-      regexp: '.*\.(avi|mkv|mp4)$'
-    accept_all: yes
-    seen: local
-    require_field:
-      - trakt_series_name
-      - trakt_season
-      - trakt_ep_name
-    copy:
-      to: "{? folder.premieres ?}/{{trakt_series_name}}/Season {{trakt_season}}"
-      along:
-        extensions:
-          - srt
-          - sub
-        subdirs:
-          - subs
-    exists: "{? folder.premieres ?}"
-    content_size:
-      min: 50
-    list_add:
-      - subtitle_list:
-          list: need_subs
-          languages:
-            - en
-            - id
-
-  copy-movies:
-    disable:
-      - seen
-      - seen_info_hash
-    template: movies-notify
-    imdb_lookup: yes
-    filesystem:
-      path: '{? staging.movies ?}'
-      recursive: yes
-      retrieve: files
-      regexp: '.*\.(avi|mkv|mp4)$'
-    accept_all: yes
-    seen: local
-    require_field: imdb_name
-    copy:
-      to: "{? folder.movies ?}/{{ imdb_mpaa_rating }}/{{ imdb_name }}"
-      along:
-        extensions:
-          - srt
-          - sub
-        subdirs:
-          - subs
-    exists: "{? folder.movies ?}"
-    content_size:
-      min: 50
-    list_add:
-      - subtitle_list:
-          list: need_subs
-          languages:
-            - en
-            - id
-
-  clean-up-transmission:
-    clean_transmission:
-      host: localhost
-      port: 9091
-      username: transmission
-      password: transmission
-      finished_for: 1 days
-      min_ratio: 1
-      delete_files: yes
-      directories:
-        -  '{? staging.premieres ?}'
-        -  '{? staging.series ?}'
-        -  '{? staging.movies ?}'
-    disable: details
-
-  fill-thetvdb-list:
-    entry_list: existing series
-    accept_all: yes
-    thetvdb_lookup: yes
-    list_add:
-      - thetvdb_list:
-          username: '{? thetvdb.username ?}'
-          account_id: '{? thetvdb.account_id ?}'
-          api_key: '{? thetvdb.api_key ?}'
-    seen: local
-
-  update-trakt-episodes:
-    disable:
-      - seen
-      - seen_info_hash
-    entry_list: existing episodes
-    trakt_lookup: yes
+      regexp: '.*\.(avi|mkv|mp4|m4v|iso)$'
     accept_all: yes
     list_add:
       - trakt_list:
-          username: '{? trakt.user ?}'
           account: '{? trakt.account ?}'
-          list: episodes-list
-          type: shows
-
-  update-trakt-series:
-    disable:
-      - seen
-      - seen_info_hash
-    entry_list: existing series
-    trakt_lookup: yes
-    accept_all: yes
-    list_add:
-      - trakt_list:
-          username: '{? trakt.user ?}'
-          account: '{? trakt.account ?}'
-          list: series-list
-          type: shows
-
-  update-trakt-movies:
-    disable:
-      - seen
-      - seen_info_hash
-    movie_list: existing movies
-    trakt_lookup: yes
-    accept_all: yes
-    list_add:
-      - trakt_list:
-          username: '{? trakt.user ?}'
-          account: '{? trakt.account ?}'
-          list: movie-list
+          list: collection
           type: movies
 
   series-trakt-set-begin:
     next_trakt_episodes:
-      username: '{? trakt.user ?}'
       account: '{? trakt.account ?}'
-      list: episodes-list
-      strip_dates: yes
-      context: collected
+      list: watchlistshows
       position: next
     accept_all: yes
     set_series_begin: yes
     disable: seen
 
-  discover-series-backfill:
-    manual: yes
-    template:
-      - series
-      - torrents
-      - transmission-series
-      - reject
-      - series-notify
-    discover:
-      release_estimations: loose
-      what:
-        - next_series_episodes:
-            from_start: yes
-            backfill: yes
-      from:
-        - rarbg:
-            category: HDTV
-        - piratebay: yes
-      limit: 6
-    interval: 12 hours
-    max_reruns: 10
-    list_match:
-      from:
-        - entry_list: existing episodes
-      action: reject
-    content_size:
-      max: 900
-      min: 20
-
-  get-series-premieres:
-    seen: local
-    template:
-      - rss-tv
-      - torrents
-      - transmission-premieres
-      - reject
-      - series-notify
-    require_field:
-      - tvdb_id
-      - tvdb_genres
-      - tvdb_series_name
-      - tvdb_first_air_date
-    thetvdb_lookup: yes
-    trakt_lookup: yes
-    regexp:
-      reject:
-        - children: {from: tvdb_genres}
-        - family: {from: tvdb_genres}
-        - food: {from: tvdb_genres}
-        - game show: {from: tvdb_genres}
-        - home and garden: {from: tvdb_genres}
-        - musical: {from: tvdb_genres}
-        - reality: {from: tvdb_genres}
-        - romance: {from: tvdb_genres}
-        - soap: {from: tvdb_genres}
-        - special interest: {from: tvdb_genres}
-        - sport: {from: tvdb_genres}
-        - talk show: {from: tvdb_genres}
-        - travel: {from: tvdb_genres}
-    series_premiere:
-      timeframe: 4 hours
-      allow_teasers: no
-      allow_seasonless: yes
-    torrent_alive:
-      min_seeds: 10
-
-  move-premieres-listed:
-    thetvdb_lookup: yes
-    trakt_lookup: yes
-    metainfo_series: yes
-    filesystem:
-      path: '{? folder.premieres ?}'
-      recursive: yes
-      retrieve: files
-      regexp: '.*\.(avi|mkv|mp4)$'
-    list_match:
-      from:
-        - trakt_list:
-            username: '{? trakt.user ?}'
-            account: '{? trakt.account ?}'
-            list: series-list
-            type: shows
-      action: accept
-    move:
-      to: "{? folder.series ?}/{{trakt_series_name}}/Season {{trakt_season}}"
-      along:
-        extensions:
-          - sub
-          - srt
-        subdirs:
-          - Subs
-          
 schedules:
   - tasks:
+    - check-collected-movies
+    interval:
+      weeks: 1
+  - tasks:
     - versioncheck
-    - update-series-list
-    - check-existing-episodes
-    - discover-movies
-    - random-movies-listing
-    - random-movies-download
-    - fill-thetvdb-list
-    - check-existing-movies
-    - update-trakt-*
-    - get-series-premieres
     interval:
       days: 1
   - tasks:
-    - copy-series
-    - copy-movies
-    - copy-premieres
-    interval:
-      minutes: 15
-  - tasks:
-    - clean-up-transmission
     - series-trakt-set-begin
     interval:
       hours: 3
   - tasks:
-    - download-series-manual
-    - download-movies-manual
+    - discover-movies
+    - discover-movies-mom
     interval:
-      minutes: 40
+      hours: 2
   - tasks:
-    - discover-series
-    - download-series-rss
-    - get-subs
+    - discover-series-*
     interval:
-      minutes: 30
+      minutes: 20
